@@ -1,0 +1,29 @@
+Plugin @revoice
+Written by Johan Vromans
+
+This plugin processes a line of input and returns the line with all chords
+revoiced.
+
+SYNOPSIS
+
+    21 @revoice Cm D
+    22 @revoice Cm7 Fm7
+       @revoice Gm7
+
+    or
+
+    @revoice 21 Cm D
+    @revoice 22 Cm7 Fm7
+
+    DO NOT USE WITH Begin/End -- IT WILL DIE!
+
+    # So no not do this!
+    Begin @revoice
+        21 Cm D
+    End
+
+DESCRIPTION
+
+    Revoicing means that additional harmonics are added for the chords
+    to sound fuller, and subsequent chords may sound slightly different.
+    This is most interesting for slow music with long chords.
