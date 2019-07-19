@@ -28,3 +28,8 @@ DESCRIPTION
 
     This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
     Version 1.0.
+
+    As of MMA 19.07 there is a $_DATEYEAR macro, so it may be easier
+    to just add the following line to your song, or .mmarc:
+
+    MIDICopyright (C) $_DATEYEAR YourName
