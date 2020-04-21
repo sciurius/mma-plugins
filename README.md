@@ -1,4 +1,5 @@
 # mma-plugins
+
 A set of plugins for MMA (Musical Midi Accompaniment)
 
 This repository contains a couple of plugins for MMA, the Musical Midi
@@ -15,6 +16,10 @@ Inserts a copyright message into the MIDI output.
 ### revoice
 
 Replaces chord by variants with randomly differing voicing.
+
+### rhythm
+
+Generates percussion sequences from ASCII percussion patterns.
 
 ### ignore
 

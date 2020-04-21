@@ -1,0 +1,19 @@
+Plugin Rhythm
+
+
+@rhythm G1, Debug=1, Level=3, Clear=1, RTime=3, RVolume=2, \
+  Seq=SnareDrum1 |-3-2| KickDrum1 |3-3-|
+
+SeqSize 4
+
+Begin Drum-Snare
+  @rhythm "|333-|||-|", Debug=1, Level=3
+  Tone     SnareDrum1
+End
+
+DefGroove G2
+
+Groove G1
+1  z * 4
+Drum-Snare @rhythm |9-9-6-9-|9-6-9--9|
+2  z * 4
