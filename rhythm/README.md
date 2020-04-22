@@ -112,7 +112,7 @@ Some examples, assuming 4 beats per bar:
 | `866---` | 6 divisions, triplet on beat 1+2 `{ 1 0 80; 1.67 0 60; 2.33 0 60 }` |
 | `-`      | silence: `Z`                                                        |
 | `*`      | use currently defined sequence for this bar: `*`                    |
-| ``       | repeat previous sequence: `/`                                       |
+|        | empty: repeat previous sequence: `/`                                       |
 
 If the first bar is empty it will generate a silent bar.
 
