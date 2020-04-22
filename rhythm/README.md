@@ -10,10 +10,28 @@ This defines a groove according to the `Seq`, with optional values for `RTime` e
 
 For example:
 
-    @rhythm G1, Debug=1, Level=3, Clear=1, RTime=3, RVolume=2, \
-      Seq=SnareDrum1 |-3-2| KickDrum1 |3-3-|
+    @rhythm G1, Clear=1, RTime=3, RVolume=2, \
+      Seq=SnareDrum1 |-9-6| KickDrum1 |9-9-|
 
-This is identical to:
+This is the same as:
+
+```
+SeqClear
+Begin Drum-SnareDrum1
+    Tone SnareDrum1
+    RTime 3
+    RVolume 2
+    @rhythm |-9-6|
+End
+Begin Drum-KickDrum1
+    Tone KickDrum1
+    RTime 3
+    RVolume 2
+    @rhythm |9-9-|
+End
+DefGroove G1
+```
+And expands to:
 
 ```
 SeqClear
@@ -31,27 +49,27 @@ Begin Drum-KickDrum1
 End
 DefGroove G1
 ```
-Instead of passing the patterns to `Seq` as a value, you can put them in a macro and pass the macro *name* (not value!) instead. See below.
+Instead of passing the patterns to `Seq` as a literal strings, you can put them in a macro and pass the macro *name* (not value!) instead. See below.
 
 The commands `SeqClear`, `SeqSize`, `RTime` and `RVolume` are only included if the corresponding argument is set to a non-zero value.
 
 When vertically aligning the percussion patterns it becomes visible how the instruments sound together to play the rhythm. For example this is a typical 4-bar percussion:
 
 ```
-Kick  |2-------3-------|2-------2-------|2-------3-------|2-------2-------|
-Snare |----3-------3---|----3-------3---|----3-------3---|----3-------3---|
-HiHat |3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-11|
+KickDrum1   |6-------9-------|6-------6-------|6-------9-------|6-------6-------|
+SnareDrum1  |----9-------9---|----9-------9---|----9-------9---|----9-------9---|
+ClosedHiHat |9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-33|
 ```
 This is best done with a (multi-line) macro:
 
 ```
 MSet 08Beat01
-1 |2-------3-------|2-------2-------|2-------3-------|2-------2-------|
-2 |----3-------3---|----3-------3---|----3-------3---|----3-------3---|
-3 |3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-11|
+KickDrum1   |6-------9-------|6-------6-------|6-------9-------|6-------6-------|
+SnareDrum1  |----9-------9---|----9-------9---|----9-------9---|----9-------9---|
+ClosedHiHat |9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-3-|9-3-9-3-9-3-9-33|
 MSetEnd
 
-@rhythm G2, 08Beat01, SeqSize=4, Debug=1, Level=3, Clear=1, RTime=3, RVolume=2
+@rhythm G2, 08Beat01, SeqSize=4, Clear=1, RTime=3, RVolume=2
 
 ```
 
@@ -71,7 +89,7 @@ For example:
 
     Drum-Snare @rhythm |9-9-6-9-|9-6-9--9|
 
-This is identical to:
+Expands to:
 
 ```
 Drum-Snare Sequence { 1 0 90; 2 0 90; 3 0 60; 4 0 90 } \
@@ -85,7 +103,7 @@ For example:
 
     Drum  @rhythm Define=Xx, Seq=|9-9-6-9-|
 
-This is identical to:
+This expands to:
 ```
 Drum Define Xx 1 0 90; 2 0 90; 3 0 60; 4 0 90
 ```
@@ -120,3 +138,7 @@ If the first bar is empty it will generate a silent bar.
 
 This indicates the maximum volume level as used in the sequence.
 Normally volume levels are `0`..`9`, corresponding to volume 0 (silent) to `90`. Zoom tabs use volumes `0,1,2,3`, so with argument `Level=3` these become full-scale volumes `0,30,60,90`.
+
+## Hints
+
+Use `mma -e` to see the expanded lines.
