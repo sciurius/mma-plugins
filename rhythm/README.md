@@ -104,16 +104,15 @@ Some examples, assuming 4 beats per bar:
 
 | ASCII      | Sequence                                                            |
 | :--------- | :------------------------------------------------------------------ |
-| `|6|`      | 1 division, velocity 60 on beat 1 `{ 1 0 60 }`                      |
-| `|68|`     | 2 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
-| `|6-8-|`   | 4 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
-| `|6--8|`   | 4 divisions, beat 1 and 4: `{ 1 0 60; 4 0 80 }`                     |
-| `|6--8--|` | 6 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
-| `|866---|` | 6 divisions, triplet on beat 1+2 `{ 1 0 80; 1.67 0 60; 2.33 0 60 }` |
-| `|-|`      | silence: `Z`                                                        |
-| `|*|`      | use currently defined sequence for this bar: `*`                    |
-| `||`       | repeat previous sequence: `/`                                       |
-| `|6||`     | one bar plus repeat: `{1 0 60 } /`                                  |
+| `6`      | 1 division, velocity 60 on beat 1 `{ 1 0 60 }`                      |
+| `68`     | 2 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
+| `6-8-`   | 4 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
+| `6--8`   | 4 divisions, beat 1 and 4: `{ 1 0 60; 4 0 80 }`                     |
+| `6--8--` | 6 divisions, beat 1 and 3: `{ 1 0 60; 3 0 80 }`                     |
+| `866---` | 6 divisions, triplet on beat 1+2 `{ 1 0 80; 1.67 0 60; 2.33 0 60 }` |
+| `-`      | silence: `Z`                                                        |
+| `*`      | use currently defined sequence for this bar: `*`                    |
+| ``       | repeat previous sequence: `/`                                       |
 
 If the first bar is empty it will generate a silent bar.
 
