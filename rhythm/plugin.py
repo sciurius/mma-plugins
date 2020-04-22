@@ -1,6 +1,7 @@
 # We import the plugin utilities
 from MMA import pluginUtils as pu
 from MMA import parse
+from MMA import macro
 import re
 
 # A short plugin description.
@@ -17,9 +18,8 @@ pu.setSynopsis("""
   or
     Track @rhythm Seq, Bpm, Level, Debug
   or
-    Begin Track
-       @rhythm Seq, Bpm, Level, Debug
-    End
+    Track @rhythm Define=Pat, Seq, Bpm, Level, Debug
+
 """)
 
 # These are the arguments for the full (non-track) call.
@@ -37,26 +37,12 @@ pu.addArgument( "Debug",  '0',    "For debugging."    )
 
 # We add a small doc. %NAME% is replaced by plugin name.
 pu.setPluginDoc("""
-This plugin defines percussion grooves using ASCII tabs.
+This plugin creates percussion patterns using ASCII tabs.
 
-Percussion sequences are defined as strings similar to
-
-    |9-9-6-9-|9-6-9--9|
-
-This example describes a pattern of two bars.
-Each bar is divided into 8 equal division.
-Each division has either a decimal number indicating that the instrument must sound, or a '-' to do nothing.
-This example would result in the following MMA sequence:
-{ 1 0 90; 2 0 90; 3 0 60; 4 0 90 }
-{ 1 0 90; 2 0 60; 3 0 90; 4.5 0 90 }
-Special bars are:
-|| repeat the previous bar. If this is the first, use a silent bar.
-|-| a silent bar
-|*| use the currently defined sequence
-The number of divisions may be anything, althout 4, 8 and 16 are the most common. If you have a ternary beat, or want to use triads, use a tri-fold, e.g. 12.
+See https://github.com/sciurius/mma-plugins/blob/master/rhythm/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.0.
+Version 1.01.
 """)
 
 # ###################################
@@ -92,11 +78,21 @@ def run(line):
     if clear: pu.addCommand("SeqClear")
     if seqsz: pu.addCommand("SeqSize {}".format(seqsz))
 
-    beginData = parse.beginData
-    if beginData:
-        print("{}/{}".format(beginData,track))
     # The sequence data is a series of Instrument Pattern pairs.
+    # It may be passed in a macro name.
     line = seq.split()
+    if len(line) == 1:
+        # Macro name.
+        line = pu.getVar(seq.upper())
+        # MSet macro return list of list. Flatten.
+        if len(line) > 0 and isinstance(line[0], list):
+            line = [item for sublist in line for item in sublist]
+        else:
+            # Single value macro. Split.
+            line = line.split()
+
+    if len(line) % 2:
+        raise Exception("Rhythm: Seq must have an even number of whitespace separated items")
 
     # Process two at a time.
     while len(line) > 1:
@@ -129,6 +125,7 @@ def run(line):
 def trackRun( track, line ):
     pu._P().ARGUMENTS = [];
     pu.addArgument( "Seq",   None, "Sequence tab."     )
+    pu.addArgument( "Define", "",    "For defining."    )
     pu.addArgument( "Bpm",   4,    "Beats per bar."    )
     pu.addArgument( "Level", 9,    "Max volume value." )
     pu.addArgument( "Debug", 0,    "For debugging."    )
@@ -138,17 +135,22 @@ def trackRun( track, line ):
     bpm = int(args["Bpm"])
     vol = int(args["Level"])
     debug = int(args["Debug"])
+    define = args["Define"]
+    
+    if define == "":
+        cmd = "Sequence " + process_sequence( seq, bpm, vol )
+    else:
+        cmd = process_sequence( seq, bpm, vol )
+        cmd = "Define " + define + " " + cmd[2:-2]
 
     # Hackattack...
     # If we're called from a Begin Drum-Foo then we should not include
     # the track in the resultant command.
     beginData = parse.beginData
-    if beginData:
-        print("{}/{}".format(beginData,track))
     if beginData and beginData[0].upper() == track:
-        cmd = "Sequence " + process_sequence( seq, bpm, vol )
+        1
     else:
-        cmd = track + " Sequence " + process_sequence( seq, bpm, vol )
+        cmd = track + " " + cmd
 
     if debug: print("Rhythm: " + cmd)
     pu.addCommand(cmd)

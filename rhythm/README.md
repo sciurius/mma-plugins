@@ -31,12 +31,33 @@ Begin Drum-KickDrum1
 End
 DefGroove G1
 ```
+Instead of passing the patterns to `Seq` as a value, you can put them in a macro and pass the macro *name* (not value!) instead. See below.
 
-The commands `SeqClear`, `SeqSize`, `RTime` and `RVolume` are only included if the corresponding argument is set to a non-zera value.
+The commands `SeqClear`, `SeqSize`, `RTime` and `RVolume` are only included if the corresponding argument is set to a non-zero value.
 
-## Track usage
+When vertically aligning the percussion patterns it becomes visible how the instruments sound together to play the rhythm. For example this is a typical 4-bar percussion:
 
-The plugin can also be called as a track plugin.
+```
+Kick  |2-------3-------|2-------2-------|2-------3-------|2-------2-------|
+Snare |----3-------3---|----3-------3---|----3-------3---|----3-------3---|
+HiHat |3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-11|
+```
+This is best done with a (multi-line) macro:
+
+```
+MSet 08Beat01
+1 |2-------3-------|2-------2-------|2-------3-------|2-------2-------|
+2 |----3-------3---|----3-------3---|----3-------3---|----3-------3---|
+3 |3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-11|
+MSetEnd
+
+@rhythm G2, 08Beat01, SeqSize=4, Debug=1, Level=3, Clear=1, RTime=3, RVolume=2
+
+```
+
+## Track usage (defining sequences)
+
+The plugin can be called as a track plugin to set sequences for a track.
 
     Track @rhythm Seq, Bpm=4, Level=9, Debug=0
 
@@ -55,6 +76,18 @@ This is identical to:
 ```
 Drum-Snare Sequence { 1 0 90; 2 0 90; 3 0 60; 4 0 90 } \
                     { 1 0 90; 2 0 60; 3 0 90; 4.5 0 90 }
+```
+## Track usage (defining patterns)
+
+The plugin can also be used to define patterns.
+
+For example:
+
+    Drum  @rhythm Define=Xx, Seq=|9-9-6-9-|
+
+This is identical to:
+```
+Drum Define Xx 1 0 90; 2 0 90; 3 0 60; 4 0 90
 ```
 
 ## Description of ASCII sequence data
@@ -88,4 +121,3 @@ If the first bar is empty it will generate a silent bar.
 
 This indicates the maximum volume level as used in the sequence.
 Normally volume levels are `0`..`9`, corresponding to volume 0 (silent) to `90`. Zoom tabs use volumes `0,1,2,3`, so with argument `Level=3` these become full-scale volumes `0,30,60,90`.
-

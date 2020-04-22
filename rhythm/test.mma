@@ -1,19 +1,41 @@
+// Testing Rhythm plugin.
+// Use mma -e to see the expansions.
+
 Plugin Rhythm
 
-
-@rhythm G1, Debug=1, Level=3, Clear=1, RTime=3, RVolume=2, \
+// Defining a groove.
+@rhythm G1, Level=3, Clear=1, RTime=3, RVolume=2, \
   Seq=SnareDrum1 |-3-2| KickDrum1 |3-3-|
 
-SeqSize 4
+// Same, using a macro.
+MSet 08Beat01
+1 |2-------3-------|2-------2-------|2-------3-------|2-------2-------|
+2 |----3-------3---|----3-------3---|----3-------3---|----3-------3---|
+3 |3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-1-|3-1-3-1-3-1-3-11|
+MSetEnd
 
+@rhythm G2, 08Beat01, SeqSize=4, Level=3, Clear=1, RTime=3, RVolume=2
+
+// Defining a sequence.
+SeqSize 4
 Begin Drum-Snare
-  @rhythm "|333-|||-|", Debug=1, Level=3
+  @rhythm "|333-|||-|", Level=3
   Tone     SnareDrum1
 End
 
-DefGroove G2
+DefGroove G3
+
+// Defining patterns for use in sequences.
+Begin Drum
+      @rhythm Define=X13, Seq="|3-3-|", Level=3
+      @rhythm Define=X24, Seq="|-3-3|", Level=3
+End
 
 Groove G1
 1  z * 4
+Groove G2
+2  z * 4
+Groove G3
+3  z * 4
 Drum-Snare @rhythm |9-9-6-9-|9-6-9--9|
 2  z * 4
