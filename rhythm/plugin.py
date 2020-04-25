@@ -42,7 +42,7 @@ This plugin creates percussion patterns using ASCII tabs.
 See https://github.com/sciurius/mma-plugins/blob/master/rhythm/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.01.
+Version 1.02.
 """)
 
 # ###################################
@@ -103,6 +103,9 @@ def run(line):
             # If it is a number, use the Zoom predefined names.
             tone = zoomTones[int(instr)-1]
             instr = zoomNames[int(instr)-1]
+        elif instr in zoomNames:
+            i = zoomNames.index(instr)
+            tone = zoomTones[i]
         else:
             tone = instr
 
