@@ -42,7 +42,7 @@ This plugin creates percussion patterns using ASCII tabs.
 See https://github.com/sciurius/mma-plugins/blob/master/rhythm/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.02.
+Version 1.03.
 """)
 
 # ###################################
@@ -129,9 +129,9 @@ def trackRun( track, line ):
     pu._P().ARGUMENTS = [];
     pu.addArgument( "Seq",   None, "Sequence tab."     )
     pu.addArgument( "Define", "",    "For defining."    )
-    pu.addArgument( "Bpm",   4,    "Beats per bar."    )
-    pu.addArgument( "Level", 9,    "Max volume value." )
-    pu.addArgument( "Debug", 0,    "For debugging."    )
+    pu.addArgument( "Bpm",   "4",    "Beats per bar."    )
+    pu.addArgument( "Level", "9",    "Max volume value." )
+    pu.addArgument( "Debug", "0",    "For debugging."    )
     args = pu.parseCommandLine(line)
 
     seq = args["Seq"]
