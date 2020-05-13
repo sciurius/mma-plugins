@@ -3,8 +3,8 @@
 # Author          : Johan Vromans
 # Created On      : Tue May 12 07:25:02 2020
 # Last Modified By: Johan Vromans
-# Last Modified On: Wed May 13 15:20:20 2020
-# Update Count    : 58
+# Last Modified On: Wed May 13 22:23:38 2020
+# Update Count    : 73
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -15,7 +15,7 @@ use warnings;
 # Package name.
 my $my_package = 'Sciurix';
 # Program name and version.
-my ($my_name, $my_version) = qw( midi2mma 0.01 );
+my ($my_name, $my_version) = qw( midi2mma 0.02 );
 
 ################ Command line parameters ################
 
@@ -61,6 +61,7 @@ my $ticks = $o->ticks;		# ticks per beat
 
 # These will be derived from the MIDI data.
 my $bpm   = 4;			# beats per measure (tentative)
+my $bu    = 4;			# quarter notes
 my $tempo = 120;		# tempo (tentative)
 
 # Accumulated output.
@@ -71,7 +72,8 @@ for my $track ( $o->tracks_r->[0] ) {
     for my $e ( $track->events ) {
 	if ( $e->[EV_TYPE] eq 'time_signature' ) {
 	    $bpm = $e->[2];
-	    warn("Time signature = $bpm/", 2**($e->[3]), "\n") if $verbose;
+	    $bu = 2**($e->[3]);
+	    warn("Time signature = $bpm/$bu\n") if $verbose;
 	    next;
 	}
 	if ( $e->[EV_TYPE] eq 'set_tempo' ) {
@@ -92,11 +94,11 @@ foreach my $track ( $o->tracks ) {
     # Filter out track with drum channel.
     my $isdrum = 0;
     for ( @ev ) {
+	last if $_[0];		# not at start
 	if ( $_->[EV_TYPE] eq 'patch_change' && $_->[EV_CHAN] == $percussion_channel ) {
 	    $isdrum++;
 	    last;
 	}
-	last if $_[0];		# not at start
     }
     next unless $isdrum;
 
@@ -155,7 +157,7 @@ foreach my $track ( $o->tracks ) {
 	}
 	warn("Tone $tone, smallest delta = $sd, step = $step\n")
 	  if $verbose;
-	$used{$name{$tone}} = $step;
+	$used{$tone} = $step;
 	$_step = lcm( $_step, $step );
     }
 
@@ -163,7 +165,7 @@ foreach my $track ( $o->tracks ) {
     foreach my $tone ( sort keys %$t ) {
 	my $ev = $t->{$tone};
 	my $iclock = $leadin * $ticks; # lead in, ticks
-	my $step = $compress ? $used{$name{$tone}} : $_step;
+	my $step = $compress ? $used{$tone} : ( $used{$tone} = $_step );
 	my $sd = $tpm / $step;
 
 	# Generate the tabs.
@@ -190,6 +192,9 @@ foreach my $track ( $o->tracks ) {
 	}
 	push( @{$out[$m]}, fmt_tab( $tone, $res ) );
     }
+
+    # Only one drum track.
+    last;
 }
 
 # Combine and print all.
@@ -215,16 +220,18 @@ sub fmt_mma {
     print <<EOD;
 Plugin Rhythm
 
-// For setting up the instruments.
-MSet BeatA
+Time $bpm/$bu
+SeqClear
+SeqSize 1
+
+// Setting up the instruments.
 EOD
     for ( sort keys %$used ) {
-	printf("%-14s |-|\n", $_ );
+	printf("Drum-%-14s Tone %s\n", $name{$_}, $name{$_} );
     }
     print <<EOD;
-MSetEnd
 
-\@rhythm BeatA, BeatA
+DefGroove BeatA
 
 Tempo $tempo
 
@@ -235,6 +242,13 @@ Groove BeatA
 EOD
 
     printf( "// DrumKit %s\n\n", $kits{$patch} ) if $kits{$patch};
+
+    # Start with empty.
+    foreach ( keys %$used ) {
+	$used->{$name{$_}} = sprintf("Drum-%-14s \@rhythm  Seq=|%s|",
+			      $name{$_}, "-" x $used->{$_} );
+    }
+
     my $measure = 0;
     for my $m ( @$out ) {
 	$measure++;
