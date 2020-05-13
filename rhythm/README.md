@@ -142,3 +142,5 @@ Normally volume levels are `0`..`9`, corresponding to volume 0 (silent) to `90`.
 ## Hints
 
 Use `mma -e` to see the expanded lines.
+
+The included perl program `midi2mma.pl` does a great job at extracting percussion data from MIDI files and turning it into MMA files.
