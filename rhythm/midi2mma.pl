@@ -3,8 +3,8 @@
 # Author          : Johan Vromans
 # Created On      : Tue May 12 07:25:02 2020
 # Last Modified By: Johan Vromans
-# Last Modified On: Wed May 13 22:23:38 2020
-# Update Count    : 73
+# Last Modified On: Thu May 14 22:03:00 2020
+# Update Count    : 133
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -15,7 +15,7 @@ use warnings;
 # Package name.
 my $my_package = 'Sciurix';
 # Program name and version.
-my ($my_name, $my_version) = qw( midi2mma 0.02 );
+my ($my_name, $my_version) = qw( midi2mma 0.03 );
 
 ################ Command line parameters ################
 
@@ -23,8 +23,11 @@ use Getopt::Long 2.13;
 
 # Command line options.
 my $leadin   = 0;		# lead in, beats
-my $compress = 0;		# compress tabs (not equally wide)
 my $output;			# output
+my $utempo;			# user override tempo
+my $seqsize = 1;		# seqsize
+my %section;			# sections, if any
+my $after;			# use After for commands
 my $percussion_channel = 9;	# channel 10
 my $verbose  = 1;		# verbose processing
 
@@ -60,7 +63,7 @@ my $o = MIDI::Opus->new( { from_file => $ARGV[0] } );
 my $ticks = $o->ticks;		# ticks per beat
 
 # These will be derived from the MIDI data.
-my $bpm   = 4;			# beats per measure (tentative)
+my $bpm   = 4;			# beats per measure
 my $bu    = 4;			# quarter notes
 my $tempo = 120;		# tempo (tentative)
 
@@ -125,6 +128,7 @@ foreach my $track ( $o->tracks ) {
 
     # Prescan the events to find step size.
     my $_step = 1;
+    my $_m = 0;
     foreach my $tone ( sort keys %$t ) {
 	my $ev = $t->{$tone};
 	my $iclock = $leadin * $ticks; # lead in, ticks
@@ -156,29 +160,37 @@ foreach my $track ( $o->tracks ) {
 	    }
 	}
 	warn("Tone $tone, smallest delta = $sd, step = $step\n")
-	  if $verbose;
+	  if $trace;
 	$used{$tone} = $step;
 	$_step = lcm( $_step, $step );
+	$_m = $clock if $clock > $_m;
     }
+
+    warn("Last event at $_m\n") if $trace;
+    $_m = 2 + int( ($_m - $leadin * $ticks - 1) / $tpm );
+    warn("Number of measures = $_m\n") if $verbose;
 
     # Process the events.
     foreach my $tone ( sort keys %$t ) {
 	my $ev = $t->{$tone};
 	my $iclock = $leadin * $ticks; # lead in, ticks
-	my $step = $compress ? $used{$tone} : ( $used{$tone} = $_step );
+	my $step = $used{$tone} = $_step;
 	my $sd = $tpm / $step;
 
-	# Generate the tabs.
 	my $clock = $iclock;
 	my $res = "-" x $step;
+	# Prefill with empty measures.
+	$out[$_]->{$tone} = $res for 0..$_m-1;
+
+	# Generate the tabs.
 	my $m = 0;
 	for ( @$ev ) {
 	    while ( $_->[EV_TIME] >= $iclock + $bpm * $ticks ) {
-		push( @{$out[$m]}, fmt_tab( $tone, $res ) );
+		$out[$m]->{$tone} = $res;
+		$m++;
 		$iclock += $tpm;
 		$clock = $iclock;
 		$res = "-" x $step;
-		$m++;
 	    }
 	    if ( $debug ) {
 		printf STDERR ( "%6d: step %2d, velo %d\n",
@@ -190,7 +202,7 @@ foreach my $track ( $o->tracks ) {
 		    1 + int( $_->[EV_NOTE_VELO] / 12.8 ) );
 	    $clock = $_->[EV_TIME];
 	}
-	push( @{$out[$m]}, fmt_tab( $tone, $res ) );
+	$out[$m]->{$tone} = $res;
     }
 
     # Only one drum track.
@@ -222,7 +234,7 @@ Plugin Rhythm
 
 Time $bpm/$bu
 SeqClear
-SeqSize 1
+SeqSize $seqsize
 
 // Setting up the instruments.
 EOD
@@ -231,89 +243,51 @@ EOD
     }
     print <<EOD;
 
-DefGroove BeatA
+DefGroove Dummy
 
-Tempo $tempo
+Tempo @{[$utempo||$tempo]}
 
 /**** End Preamble ****/
 
-Groove BeatA
+Groove Dummy
 
 EOD
 
-    printf( "// DrumKit %s\n\n", $kits{$patch} ) if $kits{$patch};
+    printf( "DrumKit %s\n\n", $kits{$patch} ) if $kits{$patch};
 
     # Start with empty.
     foreach ( keys %$used ) {
-	$used->{$name{$_}} = sprintf("Drum-%-14s \@rhythm  Seq=|%s|",
-			      $name{$_}, "-" x $used->{$_} );
+	$used->{$_} = ''; next;
+	$used->{$_} = "-" x $used->{$_};
     }
 
-    my $measure = 0;
-    for my $m ( @$out ) {
-	$measure++;
-	for my $seq ( @$m ) {
-	    next if $seq =~ /^Drum-(\S+)/ && $seq eq $used->{$1};
-	    $used->{$1} = $seq if $1;
-	    print( $seq. "\n" );
+#    while ( @$out % $seqsize ) {
+#	push( @$out, { map { $_ => $out->[-1]->{$_} } keys(%$used) } );
+#    }
+    for ( my $measure = 0; $measure < @$out; $measure += $seqsize ) {
+	my $m = $out[$measure];
+	my $ss = $seqsize;
+	for my $tone ( sort keys %$m ) {
+	    my $seq = $m->{$tone};
+	    for ( my $i = 1; $i < $seqsize; $i++ ) {
+		$ss = $i, next if $measure+$i >= @$out;
+		$seq .= '|' . $out[$measure+$i]->{$tone};
+	    }
+	    next if !$debug && $seq eq $used->{$tone};
+	    $used->{$tone} = $seq;
+	    printf( "After Count=%-3d ", $measure ) if $after;
+	    print( fmt_tab( $tone, $seq ), "\n" );
 	}
-	printf( "%3d  z\n", $measure );
+	printf( "%3d  z%s\n", $measure+1, $ss > 1 ? " * $ss" : "" )
+	  unless $after;
     }
+    printf( "  1  z * %d\n", scalar(@$out) ) if $after;
 
     if ( $fh ) {
 	close($fh) or die("$output: $!\n");
 	select(STDOUT);
     }
 }
-
-=begin later
-
-# Cute idea, but doesn't work since MMA only honors one After per location.
-
-sub fmt_mma_alt {
-    my ( $used, $out ) = @_;
-    print <<EOD;
-Plugin Rhythm
-
-// For setting up the instruments.
-MSet BeatA
-EOD
-    for ( sort keys %$used ) {
-	printf("%-14s |-|\n", $_ );
-    }
-    print <<EOD;
-MSetEnd
-
-\@rhythm BeatA, BeatA
-
-Tempo $tempo
-
-/**** End Preamble ****/
-
-Groove BeatA
-
-EOD
-
-    my $measure = 0;
-    for my $m ( @$out ) {
-	$measure++;
-	for my $seq ( @$m ) {
-	    next if $seq =~ /^Drum-(\S+)/ && $seq eq $used->{$1};
-	    $used->{$1} = $seq if $1;
-	    if ( $measure > 1 ) {
-		printf( "After Count=%d %s\n", $measure-1, $seq );
-	    }
-	    else {
-		printf( "%s\n", $seq );
-	    }
-	}
-    }
-    printf( "  1  z * %d\n", $measure );
-}
-
-=end later
-
-=cut
 
 sub fill_midi {
     # Map MIDI drum tones to MMA MIDI names.
@@ -480,9 +454,12 @@ sub app_options {
 
     # Process options.
     GetOptions( 'leadin=i'	=> \$leadin,
-		'compress'	=> \$compress,
 		'output=s'	=> \$output,
 		'channel=i'	=> sub { $percussion_channel = $_[1]-1 },
+		'seqsize=i'	=> \$seqsize,
+		'tempo=i'	=> \$utempo,
+		'section=s%'	=> \%section,
+		'after'		=> \$after,
 		'ident'		=> \$ident,
 		'verbose+'	=> \$verbose,
 		'quiet'		=> sub { $verbose = 0 },
@@ -519,9 +496,11 @@ midi2mma [options] midi-file
 
  Options:
    --leadin=NN		lead in, in beats (not bars!)
-   --compress		compress the tabs
    --output=XXX		MMA file to write
-   --channel=N		MIDI percussion channel (default 10)
+   --tempo=NNN		tempo (overrides MIDI tempo)
+   --seqsize=N		SeqSize for patterns
+   --channel=NN		MIDI percussion channel (default 10)
+   --after		use MMA 'After' command to set the patterns
    --ident		shows identification
    --help		shows a brief help message and exits
    --man                shows full documentation and exits
@@ -538,10 +517,15 @@ Lead in, in beats.
 
 Use this if the MIDI input has leadin beats.
 
-=item B<--compress>
+Note that the leadin is counted in beats, not measures.
 
-Compresses tabs. Normally all tabs are of equal width so it is easy to
-see how the intruments work together.
+=item B<--tempo=>I<NNN>
+
+Overrides the tempo setting from the MIDI file.
+
+=item B<--seqsize=>I<N>
+
+Uses the given SeqSize for the patterns. Default is 1.
 
 =item B<--output=>I<XXX>
 
@@ -614,6 +598,12 @@ https://www.mellowood.ca/mma/
 =head1 AUTHOR
 
 Johan Vromans, C<< <jv at cpan.org> >>
+
+=head1 BUGS AND DEFICIENCIES
+
+Surprising MIDI files may generate surprising results.
+
+Not all MIDI data can be processed at this time.
 
 =head1 SUPPORT AND DOCUMENTATION
 
