@@ -3,8 +3,8 @@
 # Author          : Johan Vromans
 # Created On      : Tue May 12 07:25:02 2020
 # Last Modified By: Johan Vromans
-# Last Modified On: Thu May 14 22:03:00 2020
-# Update Count    : 133
+# Last Modified On: Fri May 15 22:56:16 2020
+# Update Count    : 221
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -15,19 +15,22 @@ use warnings;
 # Package name.
 my $my_package = 'Sciurix';
 # Program name and version.
-my ($my_name, $my_version) = qw( midi2mma 0.03 );
+my ($my_name, $my_version) = qw( midi2mma 0.04 );
 
 ################ Command line parameters ################
 
 use Getopt::Long 2.13;
 
 # Command line options.
-my $leadin   = 0;		# lead in, beats
+my $leadin;			# lead in, beats
 my $output;			# output
 my $utempo;			# user override tempo
 my $seqsize = 1;		# seqsize
-my %section;			# sections, if any
+my %sections;			# sections, if any
 my $after;			# use After for commands
+my $play;			# play using mma
+my $tabs = 1;			# use tabs where possible
+my $stepmax = 48;		# max step before fallback
 my $percussion_channel = 9;	# channel 10
 my $verbose  = 1;		# verbose processing
 
@@ -129,43 +132,50 @@ foreach my $track ( $o->tracks ) {
     # Prescan the events to find step size.
     my $_step = 1;
     my $_m = 0;
+    my $e_first;
     foreach my $tone ( sort keys %$t ) {
 	my $ev = $t->{$tone};
-	my $iclock = $leadin * $ticks; # lead in, ticks
+	my $iclock = defined($leadin) ? $leadin * $ticks : 0;
 
 	# Find smallest delta to calculate step value.
 	my $clock = $iclock;
 	my $sd = $tpm;	# max
 	foreach ( @$ev ) {
+	    $e_first //= $_->[EV_TIME];
+	    $e_first = $_->[EV_TIME] if $e_first > $_->[EV_TIME];
 	    my $d = $_->[EV_TIME] - $clock;
+	    while ( $d > $tpm ) {
+		$d -= $tpm;
+	    }
 	    $clock = $_->[EV_TIME];
 	    if ( $d && $d < $sd ) {
-		$sd = $d;
+		$sd = gcd( $sd, $d );
 		printf STDERR ("Tone %02d, t = %05d, sd = %d\n",
 			       $tone, $clock, $sd ) if $trace;
 	    }
 	}
-	my $step = $tpm / $sd;
-	unless ( $step == int($step) ) {
-	    $step = sprintf("%.0f", 3*$step)
-	      if sprintf("%.3f", $step) =~ /\.(333|667)$/;
-	    $step = sprintf("%.0f", 4*$step)
-	      if sprintf("%.3f", $step) =~ /\.250$/;
-	    $step = sprintf("%.0f", 2*$step)
-	      if sprintf("%.3f", $step) =~ /\.500$/;
-	    unless ( $step == int($step) ) {
-		die(sprintf("Tone %02d, step %.3f not integer, ".
-			    "needs quantization!\n",
-			    $tone, $tpm/$sd ));
-	    }
+
+	my $step = $tabs ? $tpm / $sd : $tpm;
+	if ( $tabs && $step > $stepmax ) {
+	    warn(sprintf( "Tone %02d, step %d too large, ".
+			  "falling back to sequence!\n",
+			  $tone, $step ));
+	    $sd = 1;
+	    $step = $tpm;
 	}
 	warn("Tone $tone, smallest delta = $sd, step = $step\n")
 	  if $trace;
 	$used{$tone} = $step;
-	$_step = lcm( $_step, $step );
+	$_step = lcm( $_step, $step ) unless $step == $tpm;
 	$_m = $clock if $clock > $_m;
     }
 
+    printf STDERR ( "First event at %d (%g beats)\n",
+		    $e_first, $e_first/$ticks ) if $verbose;
+    unless ( defined $leadin ) {
+	$leadin = int($e_first/$ticks);
+	warn("Lead-in set to $leadin beats\n") if $leadin && $verbose;
+    }
     warn("Last event at $_m\n") if $trace;
     $_m = 2 + int( ($_m - $leadin * $ticks - 1) / $tpm );
     warn("Number of measures = $_m\n") if $verbose;
@@ -174,35 +184,54 @@ foreach my $track ( $o->tracks ) {
     foreach my $tone ( sort keys %$t ) {
 	my $ev = $t->{$tone};
 	my $iclock = $leadin * $ticks; # lead in, ticks
-	my $step = $used{$tone} = $_step;
+	my $step = $used{$tone} == $tpm ? $tpm : ($used{$tone} = $_step);
 	my $sd = $tpm / $step;
 
 	my $clock = $iclock;
-	my $res = "-" x $step;
-	# Prefill with empty measures.
-	$out[$_]->{$tone} = $res for 0..$_m-1;
+	my $res;
+	if ( $sd == 1 ) {
+	    $res = "";
+	    # Prefill with empty measures.
+	    $out[$_]->{$tone} = "z" for 0..$_m-1;
+	}
+	else {
+	    $res = "-" x $step;
+	    # Prefill with empty measures.
+	    $out[$_]->{$tone} = $res for 0..$_m-1;
+	}
 
 	# Generate the tabs.
 	my $m = 0;
 	for ( @$ev ) {
 	    while ( $_->[EV_TIME] >= $iclock + $bpm * $ticks ) {
-		$out[$m]->{$tone} = $res;
+		$out[$m]->{$tone} =
+		  $sd == 1
+		  ? $res ? "{ $res }" : "z"
+		  : $res;
 		$m++;
 		$iclock += $tpm;
 		$clock = $iclock;
-		$res = "-" x $step;
+		$res = $sd == 1 ? "" : ("-" x $step);
 	    }
 	    if ( $debug ) {
-		printf STDERR ( "%6d: step %2d, velo %d\n",
+		printf STDERR ( "%6d: step %.2f, velo %d\n",
 				$_->[EV_TIME],
 				1 + ( $_->[EV_TIME] - $iclock ) / $sd,
 				$_->[EV_NOTE_VELO]);
 	    }
-	    substr( $res, ( $_->[EV_TIME] - $iclock ) / $sd, 1,
-		    1 + int( $_->[EV_NOTE_VELO] / 12.8 ) );
+	    my $v = 1 + int( $_->[EV_NOTE_VELO] / (128/9) );
+	    if ( $sd == 1 ) {
+		$res .= "; " if $res;
+		$res .= sprintf( "%g 0 %d",
+				 1 + ( $_->[EV_TIME] - $iclock ) / $ticks,
+				 $v * 10 );
+	    }
+	    else {
+		substr( $res, ( $_->[EV_TIME] - $iclock ) / $sd, 1, $v );
+	    }
 	    $clock = $_->[EV_TIME];
 	}
-	$out[$m]->{$tone} = $res;
+	$out[$m]->{$tone} = $sd == 1 ? $res ? "{ $res }" : "z" : $res;
     }
 
     # Only one drum track.
@@ -215,23 +244,28 @@ fmt_mma( \%used, \@out, $patch );
 ################ Subroutines ################
 
 sub fmt_tab {
-    my ( $tone, $tab ) = @_;
-    sprintf( "Drum-%-14s \@rhythm  Seq=|%s|", $name{$tone}, $tab );
+    my ( $tone, $tab, $seq ) = @_;
+    return sprintf( "Drum-%-14s \@rhythm  Seq=|%s|", $name{$tone}, $tab ) if $tab;
+    sprintf( "Drum-%-14s Sequence %s", $name{$tone}, $seq ) if $seq;
 }
 
 sub fmt_mma {
     my ( $used, $out, $patch ) = @_;
 
     my $fh;
-    if ( $output && $output ne '-' ) {
+    if ( $play ) {
+	open( $fh, '|-:utf8', "mma", "-P", "/dev/stdin" )
+	  or die("mma: $!\n");
+	select($fh);
+    }
+    elsif ( $output && $output ne '-' ) {
 	open( $fh, '>:utf8', $output )
 	  or die("$output: $!\n");
 	select($fh);
     }
 
+    print( "Plugin Rhythm\n\n") if $tabs;
     print <<EOD;
-Plugin Rhythm
-
 Time $bpm/$bu
 SeqClear
 SeqSize $seqsize
@@ -255,38 +289,69 @@ EOD
 
     printf( "DrumKit %s\n\n", $kits{$patch} ) if $kits{$patch};
 
+    my %prev;
     # Start with empty.
     foreach ( keys %$used ) {
-	$used->{$_} = ''; next;
-	$used->{$_} = "-" x $used->{$_};
+	$prev{$_} = ''; next;
+	$prev{$_} = "-" x $used->{$_};
     }
+    my $tpm = $bpm * $ticks;   # ticks per measure
 
 #    while ( @$out % $seqsize ) {
 #	push( @$out, { map { $_ => $out->[-1]->{$_} } keys(%$used) } );
 #    }
-    for ( my $measure = 0; $measure < @$out; $measure += $seqsize ) {
-	my $m = $out[$measure];
-	my $ss = $seqsize;
-	for my $tone ( sort keys %$m ) {
-	    my $seq = $m->{$tone};
-	    for ( my $i = 1; $i < $seqsize; $i++ ) {
-		$ss = $i, next if $measure+$i >= @$out;
-		$seq .= '|' . $out[$measure+$i]->{$tone};
-	    }
-	    next if !$debug && $seq eq $used->{$tone};
-	    $used->{$tone} = $seq;
-	    printf( "After Count=%-3d ", $measure ) if $after;
-	    print( fmt_tab( $tone, $seq ), "\n" );
+
+
+    %sections = ( '' => 1 ) unless %sections;
+    my @s = sort { $sections{$a} <=> $sections{$b} } keys(%sections);
+
+    for ( my $si = 0; $si < @s; $si++ ) {
+	my $mmin = $sections{$s[$si]};
+	my $mmax = $si+1 < @s ? $sections{$s[$si+1]}-1 : @out;
+	if ( $s[$si] ne '' ) {
+	    warn("Section $s[$si]: start=$mmin, end=$mmax\n") if $verbose;
+	    printf( "// Section %s, measures %d - %d\n",
+		    $s[$si], $mmin, $mmax );
 	}
-	printf( "%3d  z%s\n", $measure+1, $ss > 1 ? " * $ss" : "" )
-	  unless $after;
+	for ( my $measure = $mmin-1; $measure < $mmax; $measure += $seqsize ) {
+	    my $m = $out[$measure];
+	    my $ss = $seqsize;
+	    for my $tone ( sort keys %$m ) {
+		my $sd = $used->{$tone} == $tpm;
+		my $seq = $m->{$tone};
+		my $prseq = $seq;
+		for ( my $i = 1; $i < $seqsize; $i++ ) {
+		    $ss = $i, last if $measure+$i >= $mmax;
+		    if ( $sd ) {
+			$seq .= $out[$measure+$i]->{$tone} ne $prseq
+			  ? " " . $out[$measure+$i]->{$tone} : " /";
+		    }
+		    else {
+			$seq .= '|' . $out[$measure+$i]->{$tone};
+		    }
+		}
+		$seq =~ s;(\s+/)+;; if $sd == 1;
+		next if !$debug && $seq eq $prev{$tone};
+		$prev{$tone} = $seq;
+		printf( "After Count=%-3d ",
+			$measure-$mmin+1 ) if $after && $measure>$mmin-1;
+		print( fmt_tab( $tone, $sd ? ( undef, $seq ) : $seq ), "\n" );
+	    }
+	    print( mma_bar( $measure, $ss ), "\n") unless $after;
+	}
+	print( mma_bar( $mmin-1, $mmax-$mmin+1 ), "\n") if $after;
+	print("\n");
     }
-    printf( "  1  z * %d\n", scalar(@$out) ) if $after;
 
     if ( $fh ) {
 	close($fh) or die("$output: $!\n");
 	select(STDOUT);
     }
+}
+
+sub mma_bar {
+    my ( $n, $repeat ) = @_;
+    sprintf( "%3d  z%s", $n+1, $repeat > 1 ? " * $repeat" : "" );
 }
 
 sub fill_midi {
@@ -458,8 +523,11 @@ sub app_options {
 		'channel=i'	=> sub { $percussion_channel = $_[1]-1 },
 		'seqsize=i'	=> \$seqsize,
 		'tempo=i'	=> \$utempo,
-		'section=s%'	=> \%section,
+		'section|s=i%'	=> \%sections,
 		'after'		=> \$after,
+		'tabs!'		=> \$tabs,
+		'stepmax=i'	=> \$stepmax,
+		'play|P'	=> \$play,
 		'ident'		=> \$ident,
 		'verbose+'	=> \$verbose,
 		'quiet'		=> sub { $verbose = 0 },
@@ -501,6 +569,10 @@ midi2mma [options] midi-file
    --seqsize=N		SeqSize for patterns
    --channel=NN		MIDI percussion channel (default 10)
    --after		use MMA 'After' command to set the patterns
+   --[no]tabs		use tabs if possible, otherwise sequences
+   --stepmax=NN         max step before falling back to sequence
+   --section=XX=NN	define section XX to start at measure NN
+   --play -P		play the file with MMA
    --ident		shows identification
    --help		shows a brief help message and exits
    --man                shows full documentation and exits
@@ -515,7 +587,8 @@ midi2mma [options] midi-file
 
 Lead in, in beats.
 
-Use this if the MIDI input has leadin beats.
+Use this if the MIDI input has leadin beats and the number of leadin
+beats is not correctly detected.
 
 Note that the leadin is counted in beats, not measures.
 
@@ -538,6 +611,32 @@ Default is standard output.
 Designates the MIDI percussion channel, if not default.
 
 GM standard is channel 10.
+
+=item B<--section=>I<XXX>B<=>I<NNN>
+
+Defines section I<XXX> to start at measure I<NNN>.
+
+This may be given multiple times.
+
+First measure is 1.
+
+=item B<--tabs>  B<--notabs>
+
+By default midi2mma graphically represents the patterns using tabs.
+These are processed in MMA by the B<Rhythm> plugin.
+
+If a sequence cannot be represented within a preset maximum of tab
+steps, an MMA C<Sequence> will be used instead.
+
+With B<--notabs> the program will always use C<Sequence> commands.
+
+See also B<--stepmax>.
+
+=item B<--stepmax=>I<NN>
+
+The maximum number of tab steps before falling back to C<Sequence> commands.
+
+Default is 48.
 
 =item B<--help>
 
