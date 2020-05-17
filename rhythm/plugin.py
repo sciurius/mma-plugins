@@ -42,7 +42,7 @@ This plugin creates percussion patterns using ASCII tabs.
 See https://github.com/sciurius/mma-plugins/blob/master/rhythm/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.03.
+Version 1.04.
 """)
 
 # ###################################
@@ -166,6 +166,9 @@ def process_sequence( tab, bpm=4, vol=9  ):
     # Volume scale. Scale 1..9 -> 10..90
     vscale = 90/vol;
 
+    # Make float (for Python2).
+    bpm *= 1.0;
+
     # Just in case we're quoted.
     if tab[ 0] in "\"'": tab = tab[1:]
     if tab[-1] in "\"'": tab = tab[:-1]
@@ -208,7 +211,7 @@ def process_sequence( tab, bpm=4, vol=9  ):
             t = re.sub(r'\.?0+$', '', t)
             # Append.
             seqs.append( "{} 0 {:d}".format( t,
-                                             round(int(char)*vscale)))
+                                             int(round(int(char)*vscale))))
 
         if len(seqs) == 0:
             # Silent sequence.
