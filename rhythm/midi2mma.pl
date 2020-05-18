@@ -3,8 +3,8 @@
 # Author          : Johan Vromans
 # Created On      : Tue May 12 07:25:02 2020
 # Last Modified By: Johan Vromans
-# Last Modified On: Fri May 15 22:56:16 2020
-# Update Count    : 221
+# Last Modified On: Mon May 18 08:39:09 2020
+# Update Count    : 237
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -31,6 +31,8 @@ my $after;			# use After for commands
 my $play;			# play using mma
 my $tabs = 1;			# use tabs where possible
 my $stepmax = 48;		# max step before fallback
+my $stepmin = 1;		# min step
+my $quant = 0;			# quantizise
 my $percussion_channel = 9;	# channel 10
 my $verbose  = 1;		# verbose processing
 
@@ -95,11 +97,10 @@ my $patch = 0;			# drumkit, usually 0 (standard kit)
 
 # Process the tracks.
 foreach my $track ( $o->tracks ) {
-    my @ev = $track->events;
 
     # Filter out track with drum channel.
     my $isdrum = 0;
-    for ( @ev ) {
+    for ( $track->events ) {
 	last if $_[0];		# not at start
 	if ( $_->[EV_TYPE] eq 'patch_change' && $_->[EV_CHAN] == $percussion_channel ) {
 	    $isdrum++;
@@ -110,6 +111,12 @@ foreach my $track ( $o->tracks ) {
 
     # Convert delta to absolute times.
     $track->delta2time;
+
+    if ( $quant ) {
+	$_->[EV_TIME] = $quant * int( $_->[EV_TIME] / $quant )
+	  for $track->events;
+    }
+    my @ev = $track->events;
 
     # Collect note_on events per tone.
     my $t;
@@ -165,11 +172,15 @@ foreach my $track ( $o->tracks ) {
 	}
 	warn("Tone $tone, smallest delta = $sd, step = $step\n")
 	  if $trace;
-	$used{$tone} = $step;
+	$used{$tone} = $step < $stepmin ? $stepmin : $step;
 	$_step = lcm( $_step, $step ) unless $step == $tpm;
 	$_m = $clock if $clock > $_m;
     }
 
+    unless ( $e_first ) {
+	print STDERR ("No events? Skipped...\n" );
+	last;
+    }
     printf STDERR ( "First event at %d (%g beats)\n",
 		    $e_first, $e_first/$ticks ) if $verbose;
     unless ( defined $leadin ) {
@@ -239,7 +250,7 @@ foreach my $track ( $o->tracks ) {
 }
 
 # Combine and print all.
-fmt_mma( \%used, \@out, $patch );
+fmt_mma( \%used, \@out, $patch ) if %used;
 
 ################ Subroutines ################
 
@@ -287,7 +298,7 @@ Groove Dummy
 
 EOD
 
-    printf( "DrumKit %s\n\n", $kits{$patch} ) if $kits{$patch};
+    printf( "Tweaks DrumKit=%s\n\n", $kits{$patch} ) if $kits{$patch};
 
     my %prev;
     # Start with empty.
@@ -450,13 +461,22 @@ sub fill_midi {
     %kits = (  0 => 'Standard',
 	     # SG extensions.
 	       8 => 'Room',
-	      16 => 'Power',
+	      16 => 'Power',	# aka Rock
 	      24 => 'Electronic',
-	      25 => 'Tr808',
+	      25 => 'Tr808',	# aka Synth1
 	      32 => 'Jazz',
 	      40 => 'Brush',
 	      48 => 'Orchestra',
 	      56 => 'SFX',
+	       # Misc. extensions.
+	       1 => 'Standard2',
+	      30 => 'Synth2',
+	      64 => 'HipHop1',
+	      65 => 'HipHop2',
+	      66 => 'Techno1',
+	      67 => 'Techno2',
+	      68 => 'Dance1',
+	      69 => 'Dance2',
 	    );
 }
 
@@ -527,6 +547,8 @@ sub app_options {
 		'after'		=> \$after,
 		'tabs!'		=> \$tabs,
 		'stepmax=i'	=> \$stepmax,
+		'stepmin=i'	=> \$stepmin,
+		'quant=i'	=> \$quant,
 		'play|P'	=> \$play,
 		'ident'		=> \$ident,
 		'verbose+'	=> \$verbose,
@@ -571,6 +593,8 @@ midi2mma [options] midi-file
    --after		use MMA 'After' command to set the patterns
    --[no]tabs		use tabs if possible, otherwise sequences
    --stepmax=NN         max step before falling back to sequence
+   --stepmin=NN         minimal step (default 8)
+   --quant=NN		quantisize times (use 5, or 10)
    --section=XX=NN	define section XX to start at measure NN
    --play -P		play the file with MMA
    --ident		shows identification
@@ -611,6 +635,25 @@ Default is standard output.
 Designates the MIDI percussion channel, if not default.
 
 GM standard is channel 10.
+
+=item B<--stepmax=>I<NN>
+
+The maximum value for the tab steps before falling back to sequences.
+
+Default is 48.
+
+=item B<--stepmin=>I<NN>
+
+The minmum value for the tab steps.
+
+Default is 8.
+
+=item B<--quant=>I<NN>
+
+Quantisize event times by truncating to I<NN> ticks.
+
+Sensible values are 4 to 10. With tick size of 480, a 1/128th note
+corresponds to 15 ticks.
 
 =item B<--section=>I<XXX>B<=>I<NNN>
 
