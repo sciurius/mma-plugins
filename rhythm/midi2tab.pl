@@ -3,8 +3,8 @@
 # Author          : Johan Vromans
 # Created On      : Tue May 12 07:25:02 2020
 # Last Modified By: Johan Vromans
-# Last Modified On: Mon May 18 08:39:09 2020
-# Update Count    : 237
+# Last Modified On: Mon May 18 14:17:06 2020
+# Update Count    : 255
 # Status          : Unknown, Use with caution!
 
 ################ Common stuff ################
@@ -15,7 +15,7 @@ use warnings;
 # Package name.
 my $my_package = 'Sciurix';
 # Program name and version.
-my ($my_name, $my_version) = qw( midi2mma 0.04 );
+my ($my_name, $my_version) = qw( midi2tab 0.05 );
 
 ################ Command line parameters ################
 
@@ -23,6 +23,7 @@ use Getopt::Long 2.13;
 
 # Command line options.
 my $leadin;			# lead in, beats
+my $mma = 0;			# generate MMA source
 my $output;			# output
 my $utempo;			# user override tempo
 my $seqsize = 1;		# seqsize
@@ -41,12 +42,23 @@ my $debug = 0;			# debugging
 my $trace = 0;			# trace (show process)
 my $test  = 0;			# test mode.
 
+if ( $0 =~ /midi2mma(?:\.pl)$/ ) {
+    $mma = 1;
+}
+
 # Process command line options.
 app_options();
 
 # Post-processing.
 $trace |= ($debug || $test);
 $verbose |= $trace;
+
+unless ( $mma ) {
+    warn("--play only makes sense with --mma\n")  if $play;
+    warn("--after only makes sense with --mma\n") if $after;
+    warn("--tempo only makes sense with --mma\n") if $utempo;
+    warn("--[no]tabs only makes sense with --mma\n") if !$tabs;
+}
 
 ################ Presets ################
 
@@ -250,17 +262,31 @@ foreach my $track ( $o->tracks ) {
 }
 
 # Combine and print all.
-fmt_mma( \%used, \@out, $patch ) if %used;
+if ( %used ) {
+    if ( $mma ) {
+	fmt_output( \%used, \@out, $patch );
+    }
+    else {
+	$play = 0;
+	fmt_output( \%used, \@out, $patch );
+   }
+}
 
 ################ Subroutines ################
 
-sub fmt_tab {
+sub fmt_mma_tab {
     my ( $tone, $tab, $seq ) = @_;
     return sprintf( "Drum-%-14s \@rhythm  Seq=|%s|", $name{$tone}, $tab ) if $tab;
     sprintf( "Drum-%-14s Sequence %s", $name{$tone}, $seq ) if $seq;
 }
 
-sub fmt_mma {
+sub fmt_tab_tab {
+    my ( $tone, $tab, $seq ) = @_;
+    return sprintf( "%-14s  |%s|", $name{$tone}, $tab ) if $tab;
+    sprintf( "%-14s  %s", $name{$tone}, $seq ) if $seq;
+}
+
+sub fmt_output {
     my ( $used, $out, $patch ) = @_;
 
     my $fh;
@@ -275,18 +301,19 @@ sub fmt_mma {
 	select($fh);
     }
 
-    print( "Plugin Rhythm\n\n") if $tabs;
-    print <<EOD;
+    if ( $mma ) {
+	print( "Plugin Rhythm\n\n") if $tabs;
+	print <<EOD;
 Time $bpm/$bu
 SeqClear
 SeqSize $seqsize
 
 // Setting up the instruments.
 EOD
-    for ( sort keys %$used ) {
-	printf("Drum-%-14s Tone %s\n", $name{$_}, $name{$_} );
-    }
-    print <<EOD;
+	for ( sort keys %$used ) {
+	    printf("Drum-%-14s Tone %s\n", $name{$_}, $name{$_} );
+	}
+	print <<EOD;
 
 DefGroove Dummy
 
@@ -298,7 +325,8 @@ Groove Dummy
 
 EOD
 
-    printf( "Tweaks DrumKit=%s\n\n", $kits{$patch} ) if $kits{$patch};
+	printf( "Tweaks DrumKit=%s\n\n", $kits{$patch} ) if $kits{$patch};
+    }
 
     my %prev;
     # Start with empty.
@@ -344,13 +372,19 @@ EOD
 		$seq =~ s;(\s+/)+;; if $sd == 1;
 		next if !$debug && $seq eq $prev{$tone};
 		$prev{$tone} = $seq;
-		printf( "After Count=%-3d ",
-			$measure-$mmin+1 ) if $after && $measure>$mmin-1;
-		print( fmt_tab( $tone, $sd ? ( undef, $seq ) : $seq ), "\n" );
+		if ( $mma ) {
+		    printf( "After Count=%-3d ",
+			    $measure-$mmin+1 ) if $after && $measure>$mmin-1;
+		    print( fmt_mma_tab( $tone, $sd ? ( undef, $seq ) : $seq ), "\n" );
+		}
+		else {
+		    printf( "%3d  %s\n", $measure+1,
+			    fmt_tab_tab( $tone, $sd ? ( undef, $seq ) : $seq ) );
+		}
 	    }
-	    print( mma_bar( $measure, $ss ), "\n") unless $after;
+	    print( mma_bar( $measure, $ss ), "\n") if $mma && !$after;
 	}
-	print( mma_bar( $mmin-1, $mmax-$mmin+1 ), "\n") if $after;
+	print( mma_bar( $mmin-1, $mmax-$mmin+1 ), "\n") if $mma && $after;
 	print("\n");
     }
 
@@ -539,6 +573,7 @@ sub app_options {
 
     # Process options.
     GetOptions( 'leadin=i'	=> \$leadin,
+		'mma!'		=> \$mma,
 		'output=s'	=> \$output,
 		'channel=i'	=> sub { $percussion_channel = $_[1]-1 },
 		'seqsize=i'	=> \$seqsize,
@@ -578,25 +613,26 @@ __END__
 
 =head1 NAME
 
-midi2mma - extract percussion data from MIDI and write MMA file
+midi2tab - extract percussion data from MIDI and write tabs or MMA file
 
 =head1 SYNOPSIS
 
-midi2mma [options] midi-file
+midi2tab [options] midi-file
 
  Options:
-   --leadin=NN		lead in, in beats (not bars!)
-   --output=XXX		MMA file to write
-   --tempo=NNN		tempo (overrides MIDI tempo)
-   --seqsize=N		SeqSize for patterns
-   --channel=NN		MIDI percussion channel (default 10)
    --after		use MMA 'After' command to set the patterns
-   --[no]tabs		use tabs if possible, otherwise sequences
-   --stepmax=NN         max step before falling back to sequence
-   --stepmin=NN         minimal step (default 8)
+   --channel=NN		MIDI percussion channel (default 10)
+   --leadin=NN		lead in, in beats (not bars!)
+   --[no]mma		[do not] write MMA source
+   --output=XXX		MMA file to write
+   --play -P		play the file with MMA
    --quant=NN		quantisize times (use 5, or 10)
    --section=XX=NN	define section XX to start at measure NN
-   --play -P		play the file with MMA
+   --seqsize=N		SeqSize for patterns
+   --stepmax=NN         max step before falling back to sequence
+   --stepmin=NN         minimal step (default 8)
+   --[no]tabs		[do not] use tabs if possible, otherwise sequences
+   --tempo=NNN		tempo (overrides MIDI tempo)
    --ident		shows identification
    --help		shows a brief help message and exits
    --man                shows full documentation and exits
@@ -607,6 +643,12 @@ midi2mma [options] midi-file
 
 =over 8
 
+=item B<--channel=>I<NN>
+
+Designates the MIDI percussion channel, if not default.
+
+GM standard is channel 10.
+
 =item B<--leadin=>I<NN>
 
 Lead in, in beats.
@@ -616,13 +658,12 @@ beats is not correctly detected.
 
 Note that the leadin is counted in beats, not measures.
 
-=item B<--tempo=>I<NNN>
+=item B<--mma>  B<--no-mma>
 
-Overrides the tempo setting from the MIDI file.
+When specified, the output will be a MMA source file.
 
-=item B<--seqsize=>I<N>
-
-Uses the given SeqSize for the patterns. Default is 1.
+This is the default action when the program is invoked under the name
+C<midi2mma>.
 
 =item B<--output=>I<XXX>
 
@@ -630,23 +671,11 @@ Name of the output file to write with MMA data.
 
 Default is standard output.
 
-=item B<--channel=>I<NN>
+=item B<--play>
 
-Designates the MIDI percussion channel, if not default.
+Play the MMA data using MMA.
 
-GM standard is channel 10.
-
-=item B<--stepmax=>I<NN>
-
-The maximum value for the tab steps before falling back to sequences.
-
-Default is 48.
-
-=item B<--stepmin=>I<NN>
-
-The minmum value for the tab steps.
-
-Default is 8.
+For MMA generation only.
 
 =item B<--quant=>I<NN>
 
@@ -663,9 +692,25 @@ This may be given multiple times.
 
 First measure is 1.
 
+=item B<--seqsize=>I<N>
+
+Uses the given SeqSize for the patterns. Default is 1.
+
+=item B<--stepmax=>I<NN>
+
+The maximum number of tab steps before falling back to C<Sequence> commands.
+
+Default is 48.
+
+=item B<--stepmin=>I<NN>
+
+The minmum value for the tab steps.
+
+Default is 8.
+
 =item B<--tabs>  B<--notabs>
 
-By default midi2mma graphically represents the patterns using tabs.
+By default midi2tab graphically represents the patterns using tabs.
 These are processed in MMA by the B<Rhythm> plugin.
 
 If a sequence cannot be represented within a preset maximum of tab
@@ -675,11 +720,19 @@ With B<--notabs> the program will always use C<Sequence> commands.
 
 See also B<--stepmax>.
 
-=item B<--stepmax=>I<NN>
+For MMA generation only.
 
-The maximum number of tab steps before falling back to C<Sequence> commands.
+=item B<--tempo=>I<NNN>
 
-Default is 48.
+Overrides the tempo setting from the MIDI file.
+
+For MMA generation only.
+
+=back
+
+=head1 MISCELLANEOUS OPTIONS
+
+=over
 
 =item B<--help>
 
@@ -710,15 +763,79 @@ The MIDI input file to process.
 
 =head1 DESCRIPTION
 
-This program will read the MIDI input file and produce an MMA data
-file with identical (or at least very similar) percussion patterns.
+This program will read the MIDI input file and produce either a text
+file with tabs data, or an MMA data file with identical (or at least
+very similar) percussion patterns.
 
-The percussion patterns are not defined as grooves, but inserted in
-the tracksq so it is easy and straightforward to add your own grooves
-and chords.
+=head2 TABS
 
-To run the resultant MMA program, you need to install the B<rhythm>
-plugin.
+An ASCII TAB sequence consists of one or more measures separated by
+vertical bars. Each measure is divided into equal divisions,
+corresponding to the number of characters in the measure. Each
+division has either a decimal number indicating that the instrument
+must sound, or a dash C<-> to do nothing.
+
+For example:
+
+  // Section A, measures 5 - 12
+  5  KickDrum2       |---2--2--2--|2--2-6--72--|2--2--2--2--|2--2-72--7-8|
+  5  SnareDrum1      |------------|---6--6--7-8|------------|--77--7-----|
+  5  RideCymbal1     |---6-66--7-6|6--7--6--7-7|6--6-66--7-6|6--7-66--6-7|
+
+  9  KickDrum2       |---2--2--2--|2--2--2--2--|2--2--2--2--|2--2-72--7-8|
+  9  SnareDrum1      |------------|------------|---6-----6-8|--77--7-----|
+  9  RideCymbal1     |---6-66--7-6|6--6-66--7-6|6--7--6--7-7|6--7-66--6-7|
+
+The number of divisions may be anything, although 4, 8 and 16 are the
+most common. For a ternary beat, or when triads are involved,
+tri-fold like 12 or 24 is common.
+
+Some examples, assuming 4 beats per bar:
+
+=over 10
+
+=item 6
+
+1 division, velocity 60 on beat 1
+
+=item 68
+
+2 divisions, beat 1 and 3
+
+=item 6--8
+
+4 divisions, beat 1 and 4
+
+=item 6--8--
+
+6 divisions, beat 1 and 3
+
+=item 866---
+
+6 divisions, triplet on beat 1+2
+
+=item -
+
+Silence
+
+=back
+
+The digit indicates the velocity. 0 is silent, 9 is maximal.
+
+=head2 MMA
+
+For MMA, the patterns are generated as Sequence statements using the Rhythm plugin, for example:
+
+    // Section A, measures 5 - 12
+    Drum-KickDrum2   @rhythm  Seq=|---2--2--2--|2--2-6--72--|2--2--2--2--|2--2-72--7-8|
+    Drum-SnareDrum1  @rhythm  Seq=|------------|---6--6--7-8|------------|--77--7-----|
+    Drum-RideCymbal1 @rhythm  Seq=|---6-66--7-6|6--7--6--7-7|6--6-66--7-6|6--7-66--6-7|
+      5  z * 4
+
+    Drum-KickDrum2   @rhythm  Seq=|---2--2--2--|2--2--2--2--|2--2--2--2--|2--2-72--7-8|
+    Drum-SnareDrum1  @rhythm  Seq=|------------|------------|---6-----6-8|--77--7-----|
+    Drum-RideCymbal1 @rhythm  Seq=|---6-66--7-6|6--6-66--7-6|6--7--6--7-7|6--7-66--6-7|
+      9  z * 4
 
 =head2 DETAILS
 
@@ -727,7 +844,7 @@ with a patch change event for the percussion channel. All other tracks
 are ignored (except for the first track that defines tempo and time
 signature).
 
-It is currently not possible to process humanized MIDI data.
+Humanized MIDI data may need quantisation. See B<--quant>.
 
 Tools like iRealPro produce interesting percussion patterns.
 
@@ -754,7 +871,7 @@ https://github.com/sciurius/mma-plugins
 
 You can find documentation for this tool with the command.
 
-    midi2mma --man
+    midi2tab --man
 
 Please report any bugs or feature requests using the issue tracker on
 GitHub.
