@@ -88,6 +88,22 @@ A leading string name is allowed and ignored.
 Usually it is easiest to define a multi-line macro as can be seen in
 the introductionary example.
 
+In the case of a multi-line macro, spaces may be used for readability
+purposes, for example:
+
+````
+MSet pat3
+E     |  -  -  -  -  -  -  |
+B     |  -  -  7  -  -  -  |
+G     |  -  7  -  7  -  7  |
+D     |  -  -  7  -  -  -  |
+A     |  -  -  -  -  -  -  |
+E     |  9  -  -  8  -  -  |
+MSetEnd
+````
+
+Use `0` or `x` to mute a string.
+
 ## Full example
 
 ````

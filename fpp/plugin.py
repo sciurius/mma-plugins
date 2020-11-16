@@ -16,7 +16,7 @@ pu.setAuthor("Written by {}".format(author))
 pu.setTrackType('PLECTRUM')
 
 pu.setSynopsis("""
-  Track @fpp Pat, Seq, Debug
+  Track @fpp Pat, Seq, Bpb, Q, Debug
 
 """)
 
@@ -34,7 +34,7 @@ This plugin creates fingerpicking patterns using ASCII tabs.
 See https://github.com/sciurius/mma-plugins/blob/master/fpp/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.00.
+Version 1.01.
 """)
 
 # ###################################
@@ -72,13 +72,10 @@ def trackRun( track, line ):
             #print(t)
             res = []
             for item in t:
-                if len(item) == 2 and item[0].upper() in "EADBG":
-                    res.append(item[1])
-                else:
-                    if len(item) == 1:
-                        res.append(item[0])
-                    else:
-                        res.append(item)
+                if len(item) > 1 and item[0].isalnum():
+                    # Throw away string name.
+                    item = item[1:]
+                res.append("".join(item))
             t = res
             #print(t)
         else:
@@ -97,7 +94,7 @@ def trackRun( track, line ):
         if s[-1] in "\"'": s = s[:-1]
 
         # Drop leading string names.
-        if s[0].upper() in 'EADGB': s = s[1:]
+        if s[0].isalnum(): s = s[1:]
 
         # Verify (and drop) leading and trailing bars.
         if s[0] == '|' and s[-1] == '|': s = s[1:-1]
@@ -130,6 +127,7 @@ def trackRun( track, line ):
     else:
         if df == 3: df = 1
         else: df = 2
+
     # To collect strings per step.
     res = []
     for i in range(step): res.append('')
@@ -139,6 +137,7 @@ def trackRun( track, line ):
         for j in range(string):
             x = tab[j][i]
             if x == '-': continue
+            if x.upper() == 'X': x = 0
             if res[i] == "":
                 res[i] = "{:.{}f} 0 ".format(tm,df)
             res[i] += "{}:{} ".format( j+1, 10*int(x) )
