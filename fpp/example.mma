@@ -1,0 +1,30 @@
+// Example of using the FPP plugin.
+
+Plugin FPP
+
+Time 4/4
+MSet pat1
+E |--------|
+B |--7---7-|
+G |-7-7-7-7|
+D |--7---7-|
+A |--------|
+E |9---8---|
+MSetEnd
+Plectrum @fpp pp1, pat1, Debug=0
+
+// Adjust chords so they have bass on 6th string
+Begin Plectrum Shape
+    Em     0 2 2 0 0 0
+    Am     5 0 2 2 1 0
+    B7     7 2 1 2 0 2
+End
+
+// Init Plectrum track (once),
+$PPSetup
+
+// Set a pattern
+$PP1   Em
+       Am
+       B7
+       Em

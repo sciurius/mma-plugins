@@ -21,6 +21,10 @@ Replaces chord by variants with randomly differing voicing.
 
 Generates percussion sequences from ASCII percussion patterns.
 
+### fpp
+
+Generates fingerpicking patterns from ASCII tabs.
+
 ### ignore
 
 An example of a perfect, but useless, plugin.
