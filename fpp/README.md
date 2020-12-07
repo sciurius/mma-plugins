@@ -33,6 +33,10 @@ PLECTRUM Define PP1 1.0 0 6:90 ;      \
 					4.5 0 3:70 
 ````
 
+If the `Tab` argument is omitted, it defaults to the name of the
+pattern. This makes only sense when the tab data is stored in a
+variable with the same name as the pattern to be defined.
+
 It also defines a macro `PP1` that can be used to set this sequence in
 songs, for example:
 
@@ -48,10 +52,13 @@ The macro is defined as follows:
 ````
 DefCall PP1 Chords
 PLECTRUM Sequence PP1
-  1    $Chords
+    $Chords
 EndDefCall
 Set PP1 Call PP1
 ````
+
+(The actual definition is slightly different, to allow the `Chords`
+argument to be omitted in the call.)
 
 For convenience, it also defines a macro `PPSetup` that should be
 called once per groove to set it up the plectrum track. The defintion is:
@@ -146,4 +153,27 @@ from the current TimeSig. so make sure you set the right `Time`
 and/or `TimeSig`.
 
 Use `mma -e` to see the expanded lines.
+
+## Plugin version
+
+### 1.02 2020-12-07
+
+Allow name of the variable containing the ASCII pattern to default to
+the name of the pattern to be defined. The following two lines behave
+the same:
+
+    Plectrum @FPP Pat1,Pat1
+    Plectrum @FPP Pat1
+
+Allow arguments to the $Pat subroutines to be omitted. To just assign
+the sequence:
+
+    $Pat1
+
+A leading statement number is no longer provided in $Pat calls, so
+you can supply your own.
+
+    $Pat1			// just the sequence
+	$Pat1 C  		// set the sequence, and play an unnumbered chord
+	$Pat1 12 F		// set the sequence, and play a numbered chord
 

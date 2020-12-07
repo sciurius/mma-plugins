@@ -22,7 +22,7 @@ pu.setSynopsis("""
 
 # Note that pu.printUsage requires the default values to be strings. 
 pu.addArgument( "Pat",    None,   "Pattern to define."  )
-pu.addArgument( "Tab",    None,   "Pattern tab."        )
+pu.addArgument( "Tab",    '',     "Pattern tab."        )
 pu.addArgument( "Bpb",    '0',    "Beats per bar."      )
 pu.addArgument( "Q",      '0',    "Beat length (8, 4)." )
 pu.addArgument( "Debug",  '0',    "For debugging."      )
@@ -34,7 +34,7 @@ This plugin creates fingerpicking patterns using ASCII tabs.
 See https://github.com/sciurius/mma-plugins/blob/master/fpp/README.md for extensive documentation.
 
 This plugin has been written by Johan Vromans <jvromans@squirrel.nl>
-Version 1.01.
+Version 1.02.
 """)
 
 # ###################################
@@ -50,7 +50,7 @@ def trackRun( track, line ):
     args = pu.parseCommandLine(line)
 
     pat   = args["Pat"]
-    tab   = args["Tab"]
+    tab   = args["Tab"] or pat
     bpb   = int(args["Bpb"])
     q     = int(args["Q"])
     debug = int(args["Debug"])
@@ -117,7 +117,7 @@ def trackRun( track, line ):
     if step % bpb != 0:
         raise Exception( "Step size {} must be multiple of bpb {}".format(bpb,step) )
     # Force floats for python2.
-    delta = ( bpb * 4.0 ) / ( q * step )
+    delta = bpb / ( 1.0 * step )
     if delta <= 0:
         raise Exception( "DELTA ERROR: {} {} {} {}".format(delta,bpb,q,step) )
 
@@ -159,9 +159,11 @@ def trackRun( track, line ):
 
     pat = pat.upper()
     # Set picking pattern. Call after groove change.
-    pu.addCommand("DefCall " + pat + " Chords")
+    pu.addCommand("DefCall " + pat + " Chords=__OMITTED__")
     pu.addCommand(track + " Sequence " + pat)
-    pu.addCommand("  1    $Chords")
+    pu.addCommand(" If Ne $$Chords __OMITTED__")
+    pu.addCommand("  $Chords")
+    pu.addCommand(" EndIf")
     pu.addCommand("EndDefCall")
     pu.addCommand("Set " + pat + " Call " + pat)
 
@@ -180,83 +182,3 @@ def trackRun( track, line ):
 
     pu.sendCommands()
 
-# Produces an MMA sequence string from an ASCII tab.
-def process_sequence( ix, tab ):
-
-    print(tab)
-    
-    # Just in case we're quoted.
-    if tab[ 0] in "\"'": tab = tab[1:]
-    if tab[-1] in "\"'": tab = tab[:-1]
-    if tab[0].upper() in 'EADGB': tab = tab[1:]
-    print(tab)
-
-    # Check validity.
-    if len(tab) < 3 or tab[0] != '|' or tab[-1] != '|':
-        raise Exception( "Invalid tab: {}".format(tab) )
-
-    prev = ""
-    res = ""
-
-    m = re.finditer( r'([-0-9*]*)\|', tab[1:] )
-    if m == None:
-        raise Exception( "Not well-formed tab: {}".format(tab) )
-
-    # Process the bars
-    for x in m:
-        bar = x.group(1)
-        step = len(bar)
-        if step == 0:
-            # Empty bar: repeat previous.
-            # If first: silent bar.
-            if res != "":
-                res = res + '/ '
-            else:
-                res = 'Z'
-            continue
-
-        # Single arsterisk copies existing sequence.
-        if step == 1 and bar == '*':
-            res = res + '* '
-            continue
-
-        seqs = []
-        for index, char in enumerate(bar):
-            if char == '-':
-                continue
-            t = "{:f}".format( 1 + index * bpb / step)
-            # Strip unneeded trailing zeroes and decimal point.
-            t = re.sub(r'\.?0+$', '', t)
-            # Append.
-            seqs.append( "{} 0 {:d}".format( t,
-                                             int(round(int(char)*vscale))))
-
-        if len(seqs) == 0:
-            # Silent sequence.
-            seq = "Z "
-        else:
-            # Combine.
-            seq = "{ " + "; ".join(seqs) + " } "
-
-        # Check for copies.
-        if prev == seq:
-            res = res + "/ "
-        else:
-            res = res + seq
-            prev = seq
-
-    return res
-
-# Instrument names as used by Zoom percussion devices.
-zoomNames = [
-    "Kick",       "Snare",    "ClosedHat",  "OpenHat",
-    "Crash",      "Ride",     "Tom1",       "Tom2",
-    "Tom3",       "Stick",    "Bell",       "Maracas",
-    "Tambourine", "LowConga", "MutHiConga", "OpenHiConga" ]
-
-# Corresponding MMA percussion tones.
-zoomTones = [
-    "KickDrum1",    "SnareDrum1",  "ClosedHiHat",   "OpenHiHat",
-    "CrashCymbal1", "RideCymbal1", "MidTom1",       "LowTom1",
-    "HighTom1",     "SideKick",    "RideBell",      "Maracas",
-    "Tambourine",   "LowConga",    "MuteHighConga", "OpenHighConga" ]
